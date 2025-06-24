@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fantasy Console</title>
+  <style>
+  /* Reset / base */
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: black;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: monospace, sans-serif;
+    color: white;
+  }
+
+  #console {
+    image-rendering: pixelated;
+    width: 80vw;
+    max-width: 960px;
+    height: 45vw;
+    max-height: 540px;
+    background: #111;
+    display: block;
+    border: 4px solid #333;
+  }
+
+  /* Container controls : pousse dpad à gauche, buttons à droite */
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 90vw;
+    max-width: 960px;
+    margin-top: 10px;
+    padding: 0 2vw;
+    box-sizing: border-box;
+  }
+
+  /* Crois fléchée à gauche */
+  .dpad {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    min-width: 80px;
+    min-height: 80px;
+  }
+
+  .dpad button {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: black;
+    border: 2px solid cyan;
+    border-radius: 8px;
+    cursor: pointer;
+    color: cyan;
+    font-weight: bold;
+    font-size: 1.5rem;
+    user-select: none;
+    text-shadow:
+      1px 0 magenta,
+      -1px 0 cyan,
+      0 1px magenta,
+      0 -1px cyan;
+    box-shadow:
+      0 0 5px cyan,
+      0 0 10px magenta;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .dpad button[data-key="up"] {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .dpad button[data-key="down"] {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .dpad button[data-key="left"] {
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+  }
+  .dpad button[data-key="right"] {
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+
+  /* Groupe des boutons A et B à droite, espacés verticalement */
+  .buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 70px;
+    height: 120px;
+    justify-content: center;
+  }
+
+  .buttons .btn {
+    width: 50px;
+    height: 50px;
+    background: black;
+    border: 2px solid magenta;
+    border-radius: 50%;
+    cursor: pointer;
+    color: magenta;
+    font-weight: bold;
+    font-size: 1.5rem;
+    user-select: none;
+    text-shadow:
+      1px 0 cyan,
+      -1px 0 magenta,
+      0 1px cyan,
+      0 -1px magenta;
+    box-shadow:
+      0 0 5px magenta,
+      0 0 10px cyan;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  /* Responsive adaptatif sur petits écrans */
+  @media (max-width: 480px) {
+    .controls {
+      width: 95vw;
+      padding: 0 1vw;
+    }
+
+    .dpad {
+      width: 90px;
+      height: 90px;
+    }
+
+    .dpad button {
+      width: 30px;
+      height: 30px;
+      font-size: 1.2rem;
+    }
+
+    .buttons {
+      min-width: 50px;
+      height: 90px;
+      gap: 15px;
+    }
+
+    .buttons .btn {
+      width: 40px;
+      height: 40px;
+      font-size: 1.2rem;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <div id="loader">
+    <input type="file" id="fileInput" accept=".zip" />
+    <p id="instructions">Insérer une cartouche (.zip avec 1 JS + max 10 PNG)</p>
+    <p id="fileNameDisplay"></p>
+    <p id="status"></p>
+  </div>
+
+  <canvas id="console"></canvas>
+
+  <div class="controls">
+    <div class="dpad">
+      <button class="btn" data-key="up">↑</button>
+      <button class="btn" data-key="left">←</button>
+      <button class="btn" data-key="right">→</button>
+      <button class="btn" data-key="down">↓</button>
+    </div>
+    <div class="buttons">
+      <button class="btn" data-key="a">A</button>
+      <button class="btn" data-key="b">B</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    const canvas = document.getElementById('console');
+    const ctx = canvas.getContext('2d');
+    const fileInput = document.getElementById('fileInput');
+    const status = document.getElementById('status');
+    const instructions = document.getElementById('instructions');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+    const input = { up: false, down: false, left: false, right: false, a: false, b: false };
+
+    const keyMap = {
+      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+      z: 'a', a: 'a', x: 'b'
+    };
+
+    window.addEventListener('keydown', e => {
+      const key = keyMap[e.key];
+      if (key) input[key] = true;
+    });
+
+    window.addEventListener('keyup', e => {
+      const key = keyMap[e.key];
+      if (key) input[key] = false;
+    });
+
+    document.querySelectorAll('.btn').forEach(btn => {
+      const key = btn.dataset.key;
+      const set = v => input[key] = v;
+      btn.addEventListener('mousedown', () => set(true));
+      btn.addEventListener('mouseup', () => set(false));
+      btn.addEventListener('mouseleave', () => set(false));
+      btn.addEventListener('touchstart', e => { e.preventDefault(); set(true); }, { passive: false });
+      btn.addEventListener('touchend', e => { e.preventDefault(); set(false); }, { passive: false });
+    });
+
+    function drawImage(img, x, y, w, h) {
+      ctx.drawImage(img, x, y, w, h);
+    }
+
+    function loop(fn) {
+      function frame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        fn();
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+function setStatus(text) {
+  status.textContent = text;
+  if (text === 'Cartouche chargée') {
+    status.style.display = 'none';
+    instructions.style.display = 'none';
+    fileNameDisplay.style.display = 'none';
+    fileInput.style.display = 'none';
+  } else {
+    status.style.display = 'block';
+    instructions.style.display = 'block';
+    fileNameDisplay.style.display = 'block';
+    fileInput.style.display = 'block';
+  }
+}
+
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      fileNameDisplay.textContent = file.name;
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+
+        const pngFiles = Object.keys(zip.files).filter(name => name.endsWith('.png'));
+        const jsFiles = Object.keys(zip.files).filter(name => name.endsWith('.js') && !name.startsWith('__') && !name.includes('/'));
+
+        if (pngFiles.length > 10) return setStatus('Erreur : plus de 10 PNG');
+        if (jsFiles.length !== 1) return setStatus('Erreur : 1 seul JS requis');
+
+        const sprites = [];
+        for (const name of pngFiles) {
+          try {
+            const blob = await zip.files[name].async('blob');
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            sprites.push(img);
+          } catch (imgErr) {
+            console.warn(`Image ignorée (non décodable) : ${name}`);
+          }
+        }
+
+        if (sprites.length === 0) return setStatus('Erreur : aucune image valide trouvée');
+
+        const jsCode = await zip.files[jsFiles[0]].async('text');
+        const blob = new Blob([jsCode], { type: 'text/javascript' });
+        const url = URL.createObjectURL(blob);
+        const module = await import(url);
+
+        if (typeof module.run !== 'function') throw 'Fonction exportée run() non trouvée';
+
+        setStatus('Cartouche chargée');
+        module.run({ canvas, ctx, input, sprites, drawImage, loop });
+      } catch (err) {
+        setStatus('Erreur JS : ' + err);
+      }
+    });
+
+    // Resize canvas pour garder le ratio 16:9 responsive
+    function resizeCanvas() {
+      const maxWidth = window.innerWidth * 0.95;
+      const maxHeight = window.innerHeight * 0.7;
+      let width = maxWidth;
+      let height = maxWidth * 9 / 16;
+
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * 16 / 9;
+      }
+
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+
+      // Ajuster taille interne du canvas pour éviter flou
+      canvas.width = 320;
+      canvas.height = 180;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', resizeCanvas);
+  </script>
+</body>
+</html>
